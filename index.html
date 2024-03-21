@@ -1,0 +1,373 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Gabble Browser</title>
+  <style>
+    body {
+      font-family: Arial, sans-serif;
+      margin: 0;
+      padding: 0;
+      background-color: #fff;
+    }
+    header {
+      background-color: rgb(255, 0, 0);
+      color: #fff;
+      padding: 15px;
+      text-align: center;
+    }
+    #browser-container {
+      display: flex;
+      flex-direction: column;
+      height: calc(100vh - 40px);
+    }
+    #address-bar {
+      display: flex;
+      align-items: center;
+      padding: 15px;
+      background-color: #f1f1f1;
+      text-emphasis-color: red;
+    }
+    #address-input {
+      flex: 1;
+      padding: 20px;
+      font-size: 20px;
+    }
+    #nav-buttons {
+      display: flex;
+      margin-left: 15px;
+    }
+    #back-button, #outlook-button, #forward-button, #reload-button, #bookmark-button, #new-tab-button, #incognito-button, #history-button, #download-button {
+      color: red;
+      padding: 10px 20px;
+      margin-right: 5px;
+      cursor: pointer;
+      font-size: 30px;
+    }
+    #go-button {
+      color: red;
+      padding: 10px 20px; /* Adjust padding to increase button size */
+      margin-left: 10px;
+      cursor: pointer;
+      font-size: 20px;
+    }
+    
+    #tabs {
+      display: flex;
+      margin: 0 10px;
+    }
+    .tab {
+      padding: 10px 15px;
+      margin-right: 5px;
+      cursor: pointer;
+      font-size: 16px;
+    }
+    .tab.active {
+      background-color: #ddd;
+    }
+    #content {
+      flex: 1;
+      overflow: auto;
+      padding: 10px;
+    }
+    #search-suggestions {
+      position: absolute;
+      top: 60px;
+      left: 10px;
+      z-index: 1000;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      max-height: 150px;
+      overflow-y: auto;
+      display: none;
+    }
+    .suggestion {
+      padding: 8px;
+      cursor: pointer;
+    }
+    .suggestion:hover {
+      background-color: #f1f1f1;
+    }
+    #tab-previews {
+      display: flex;
+      justify-content: space-between;
+      margin-top: 10px;
+    }
+    .tab-preview {
+      border: 1px solid #ccc;
+      padding: 10px;
+      margin-right: 10px;
+      cursor: pointer;
+    }
+    #download-manager {
+      display: none;
+      position: absolute;
+      top: 60px;
+      left: 10px;
+      z-index: 1000;
+      background-color: #fff;
+      border: 1px solid #ccc;
+      box-shadow: 0 2px 4px rgba(0, 0, 0, 0.1);
+      max-height: 150px;
+      overflow-y: auto;
+    }
+    .download-item {
+      padding: 8px;
+      border-bottom: 1px solid #ccc;
+    }
+  </style>
+</head>
+<body>
+
+  <header>
+    <h1>Gabble Browser</h1>
+  </header>
+    <div id="browser-container">
+      <div id="address-bar">
+        <div id="nav-buttons">
+          <div style="color: red">
+            <button id="back-button" onclick="goBack()">&#8592;</button>
+            <button id="forward-button" onclick="goForward()">&#8594;</button>
+            <button id="reload-button" onclick="reloadPage()">&#8635;</button>
+            <button id="bookmark-button" onclick="bookmarkPage()">&#128278;</button>
+            <button id="new-tab-button" onclick="newTab()">&#43;</button>
+            <button id="history-button" onclick="showHistory()">&#x1F552;</button>
+            <button id="outlook-button" onclick="redirectToOutlook()">&#9993;</button>
+          </div>
+        </div>
+  
+  
+        <input type="text" id="address-input" placeholder="Enter URL" oninput="updateSuggestions()">
+        <button id="go-button" onclick="navigate()">&#128270;</button>
+        <div id="tabs">
+          <div class="tab active" onclick="changeTab(0)">Tab</div>
+        </div>
+        <div id="search-suggestions"></div>
+    </div>
+    <div id="content">
+      <iframe id="browser-iframe" width="100%" height="100%" frameborder="0" allowfullscreen></iframe>
+      <div id="tab-previews"></div>
+    </div>
+
+    <div id="download-manager">
+      <h2>Download Manager</h2>
+      <div id="download-list"></div>
+    </div>
+  </div>
+  
+
+  <script>
+    
+
+    var tabs = [{
+      url: '',
+      title: 'Tab',
+      history: [],
+      currentIndex: -1,
+      bookmarks: [],
+      incognito: false
+    }];
+    var currentTab = 0;
+
+    function changeTab(tabIndex) {
+      currentTab = tabIndex;
+      updateTabs();
+      updateAddressBar();
+      loadPage(tabs[currentTab].url);
+    }
+
+    function updateTabs() {
+      var tabsDiv = document.getElementById('tabs');
+      tabsDiv.innerHTML = '';
+
+      for (var i = 0; i < tabs.length; i++) {
+        var tab = tabs[i];
+        var tabElement = document.createElement('div');
+        tabElement.className = 'tab' + (i === currentTab ? ' active' : '');
+        tabElement.innerHTML = tab.title || 'Tab';
+        tabElement.setAttribute('onclick', 'changeTab(' + i + ')');
+        tabsDiv.appendChild(tabElement);
+      }
+    }
+
+    function navigate() {
+      var addressInput = document.getElementById('address-input');
+      var url = addressInput.value;
+
+      if (url.startsWith('http://') || url.startsWith('https://')) {
+        tabs[currentTab].url = url;
+        loadPage(url);
+        updateTabs();
+      } else {
+        alert('Invalid URL. Please start with "http://" or "https://".');
+      }
+    }
+
+    function goBack() {
+      var tab = tabs[currentTab];
+      if (tab.currentIndex > 0) {
+        tab.currentIndex--;
+        loadPage(tab.history[tab.currentIndex]);
+      }
+    }
+
+    function goForward() {
+      var tab = tabs[currentTab];
+      if (tab.currentIndex < tab.history.length - 1) {
+        tab.currentIndex++;
+        loadPage(tab.history[tab.currentIndex]);
+      }
+    }
+
+    function reloadPage() {
+      var tab = tabs[currentTab];
+      loadPage(tab.url);
+    }
+
+    function loadPage(url) {
+      var contentDiv = document.getElementById('content');
+      var iframe = document.getElementById('browser-iframe');
+      var tab = tabs[currentTab];
+
+      iframe.src = url;
+      contentDiv.scrollTop = 0;
+
+      // Update history
+      if (tab.currentIndex < tab.history.length - 1) {
+        tab.history = tab.history.slice(0, tab.currentIndex + 1);
+      }
+      tab.history.push(url);
+      tab.currentIndex = tab.history.length - 1;
+
+      updateAddressBar();
+      updateTabPreviews();
+    }
+
+    function updateAddressBar() {
+      var addressInput = document.getElementById('address-input');
+      addressInput.value = tabs[currentTab].url || '';
+    }
+
+    function bookmarkPage() {
+      var tab = tabs[currentTab];
+      if (tab.url && !tab.bookmarks.some(bookmark => bookmark.url === tab.url)) {
+        tab.bookmarks.push({ title: tab.title || 'Untitled', url: tab.url });
+        alert('Page bookmarked!');
+      }
+    }
+
+    function newTab() {
+      tabs.push({
+        url: '',
+        title: 'Tab',
+        history: [],
+        currentIndex: -1,
+        bookmarks: [],
+        incognito: tabs[currentTab].incognito
+      });
+      changeTab(tabs.length - 1);
+    }
+
+    function toggleIncognito() {
+      tabs[currentTab].incognito = !tabs[currentTab].incognito;
+      alert('Incognito mode ' + (tabs[currentTab].incognito ? 'enabled' : 'disabled'));
+    }
+
+    function showHistory() {
+      var tab = tabs[currentTab];
+      if (tab.history.length > 0) {
+        alert('Browsing History:\n\n' + tab.history.join('\n'));
+      } else {
+        alert('No browsing history available.');
+      }
+    }
+
+    
+
+    function updateSuggestions() {
+      var addressInput = document.getElementById('address-input');
+      var suggestionsDiv = document.getElementById('search-suggestions');
+      var query = addressInput.value.toLowerCase();
+
+      // For demonstration purposes, suggest a few search queries.
+      var searchSuggestions = ['OpenAI', 'Web Development', 'Artificial Intelligence'];
+      var filteredSuggestions = searchSuggestions.filter(suggestion => suggestion.toLowerCase().includes(query));
+
+      suggestionsDiv.innerHTML = '';
+      filteredSuggestions.forEach(suggestion => {
+        var suggestionElement = document.createElement('div');
+        suggestionElement.className = 'suggestion';
+        suggestionElement.textContent = suggestion;
+        suggestionElement.onclick = function() {
+          addressInput.value = suggestion;
+          suggestionsDiv.style.display = 'none';
+          navigate();
+        };
+        suggestionsDiv.appendChild(suggestionElement);
+      });
+    }
+
+    function updateTabPreviews() {
+      var tabPreviewsDiv = document.getElementById('tab-previews');
+      tabPreviewsDiv.innerHTML = '';
+
+      for (var i = 0; i < tabs.length; i++) {
+        var tab = tabs[i];
+        var tabPreviewElement = document.createElement('div');
+        tabPreviewElement.className = 'tab-preview';
+        tabPreviewElement.textContent = tab.title || 'Tab';
+
+        (function(tabIndex) {
+          tabPreviewElement.onclick = function() {
+            changeTab(tabIndex);
+          };
+        })(i);
+
+        tabPreviewsDiv.appendChild(tabPreviewElement);
+      }
+    }
+
+    function toggleDownloadManager() {
+      var downloadManagerDiv = document.getElementById('download-manager');
+      var downloadListDiv = document.getElementById('download-list');
+
+      if (downloadManagerDiv.style.display === 'none') {
+        downloadManagerDiv.style.display = 'block';
+        updateDownloadList();
+      } else {
+        downloadManagerDiv.style.display = 'none';
+        downloadListDiv.innerHTML = '';
+      }
+    }
+
+    function downloadFile() {
+      // For demonstration purposes, simulate a file download.
+      var filename = 'sample-file.txt';
+      var downloadItem = document.createElement('div');
+      downloadItem.className = 'download-item';
+      downloadItem.textContent = 'Downloaded: ' + filename;
+      document.getElementById('download-list').appendChild(downloadItem);
+      alert('File downloaded: ' + filename);
+    }
+
+    function updateDownloadList() {
+      // For demonstration purposes, show a list of downloaded files.
+      var downloadListDiv = document.getElementById('download-list');
+      var downloadedFiles = ['sample-file.txt', 'presentation.pdf', 'image.jpg'];
+
+      downloadedFiles.forEach(filename => {
+        var downloadItem = document.createElement('div');
+        downloadItem.className = 'download-item';
+        downloadItem.textContent = 'Downloaded: ' + filename;
+        downloadListDiv.appendChild(downloadItem);
+      });
+    }
+     function redirectToOutlook() {
+    window.location.href = 'https://outlook.office.com/owa';
+  }
+  </script>
+
+</body>
+</html>
